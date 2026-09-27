@@ -8,6 +8,8 @@
 #include <QTimer>
 
 class QLabel;
+class QLineEdit;
+class QListWidget;
 class QPlainTextEdit;
 class QPushButton;
 class QStackedWidget;
@@ -38,6 +40,20 @@ private:
     QPushButton *m_no;
 };
 
+class CopyDialog : public QDialog {
+    Q_OBJECT
+public:
+    explicit CopyDialog(const Theme &theme, QWidget *parent = nullptr);
+    void setTheme(const Theme &theme);
+    bool formatted() const { return m_formatted; }
+protected:
+    bool eventFilter(QObject *object, QEvent *event) override;
+private:
+    QPushButton *m_plain;
+    QPushButton *m_rich;
+    bool m_formatted = false;
+};
+
 class HelpDialog : public QDialog {
     Q_OBJECT
 public:
@@ -46,6 +62,25 @@ public:
 signals:
     void syncRequested();
     void updatesRequested();
+};
+
+class SearchDialog : public QDialog {
+    Q_OBJECT
+public:
+    SearchDialog(const Session &session, const Theme &theme, QWidget *parent = nullptr);
+    void setTheme(const Theme &theme);
+    void setSession(const Session &session);
+    QString noteId() const;
+    QString query() const;
+    int matchPosition() const;
+protected:
+    bool eventFilter(QObject *object, QEvent *event) override;
+private:
+    void refresh();
+    Session m_session;
+    QLineEdit *m_query;
+    QListWidget *m_results;
+    QLabel *m_status;
 };
 
 class Window : public QMainWindow {
@@ -59,6 +94,8 @@ public slots:
     void switchNote(int offset);
     void discardNote();
     void showHelp();
+    void copyNote();
+    void showSearch();
     void showSyncSetup();
     void focusNote();
 signals:
@@ -75,9 +112,12 @@ private:
     void updateHint();
     SessionStore &m_store;
     Theme m_theme;
+    QString m_altLabel;
     NoteTabs *m_tabs;
     QStackedWidget *m_stack;
     QLabel *m_hint;
+    QPushButton *m_copy;
+    QTimer m_copyTimer;
     QLabel *m_error;
     QVector<QString> m_ids;
     QVector<MarkdownEditor *> m_editors;

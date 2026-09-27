@@ -1,15 +1,20 @@
 #include "window.h"
+#include "shortcuts.h"
 #include "markdown.h"
 #include "sync.h"
 #include "update.h"
 
 #include <QApplication>
 #include <QCloseEvent>
+#include <QClipboard>
+#include <QMimeData>
 #include <QFontDatabase>
 #include <QGridLayout>
 #include <QHBoxLayout>
 #include <QKeyEvent>
 #include <QLabel>
+#include <QLineEdit>
+#include <QListWidget>
 #include <QMessageBox>
 #include <QPainter>
 #include <QPlainTextEdit>
@@ -23,6 +28,30 @@
 #include <QVBoxLayout>
 
 namespace {
+class CopyButton : public QPushButton {
+public:
+    explicit CopyButton(QWidget *parent) : QPushButton(parent) {}
+protected:
+    void paintEvent(QPaintEvent *event) override {
+        QPushButton::paintEvent(event);
+        QPainter painter(this);
+        painter.setRenderHint(QPainter::Antialiasing);
+        painter.translate((width() - 18) / 2.0, (height() - 18) / 2.0);
+        painter.setPen(QPen(property("ink").value<QColor>(), 1.4, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
+        painter.setBrush(Qt::NoBrush);
+        if (property("copied").toBool()) {
+            painter.drawLine(QPointF(3, 9), QPointF(7, 13));
+            painter.drawLine(QPointF(7, 13), QPointF(15, 5));
+        } else {
+            painter.drawRoundedRect(QRectF(6, 6, 9, 10), 1.5, 1.5);
+            painter.drawLine(QPointF(3, 12), QPointF(2, 12));
+            painter.drawLine(QPointF(2, 12), QPointF(2, 2));
+            painter.drawLine(QPointF(2, 2), QPointF(11, 2));
+            painter.drawLine(QPointF(11, 2), QPointF(11, 3));
+        }
+    }
+};
+
 QString dialogStyle(const Theme &theme) {
     return QStringLiteral(
         "QDialog { background: %1; color: %2; } QLabel { color: %2; }"
@@ -149,9 +178,67 @@ void DiscardDialog::keyPressEvent(QKeyEvent *event) {
         QDialog::keyPressEvent(event);
 }
 
+CopyDialog::CopyDialog(const Theme &theme, QWidget *parent) : QDialog(parent) {
+    setObjectName("copyDialog");
+    setWindowTitle("Copy note");
+    setWindowFlag(Qt::WindowContextHelpButtonHint, false);
+    setModal(true);
+    auto *layout = new QVBoxLayout(this);
+    layout->setContentsMargins(32, 28, 32, 24);
+    layout->setSpacing(24);
+    auto *title = new QLabel("Copy note as…", this);
+    title->setAlignment(Qt::AlignCenter);
+    layout->addWidget(title);
+    auto *buttons = new QHBoxLayout;
+    m_plain = new QPushButton("Plain text", this);
+    m_plain->setObjectName("copyPlain");
+    m_rich = new QPushButton("Formatted text", this);
+    m_rich->setObjectName("copyFormatted");
+    for (auto *button : {m_plain, m_rich}) {
+        button->setAutoDefault(false);
+        button->installEventFilter(this);
+        buttons->addWidget(button);
+    }
+    layout->addLayout(buttons);
+    auto *hint = new QLabel("←/→  Choose     Enter  Copy     Esc  Cancel", this);
+    hint->setObjectName("dialogHint");
+    hint->setAlignment(Qt::AlignCenter);
+    QFont small = font();
+    small.setPointSizeF(9.5);
+    hint->setFont(small);
+    layout->addWidget(hint);
+    connect(m_plain, &QPushButton::clicked, this, &QDialog::accept);
+    connect(m_rich, &QPushButton::clicked, this, [this] {
+        m_formatted = true;
+        accept();
+    });
+    setTheme(theme);
+    m_plain->setFocus();
+}
+
+void CopyDialog::setTheme(const Theme &theme) {
+    setStyleSheet(dialogStyle(theme));
+}
+
+bool CopyDialog::eventFilter(QObject *object, QEvent *event) {
+    if (event->type() == QEvent::KeyPress) {
+        auto *key = static_cast<QKeyEvent *>(event);
+        if (key->key() == Qt::Key_Left || key->key() == Qt::Key_Right ||
+            key->key() == Qt::Key_Up || key->key() == Qt::Key_Down) {
+            (m_plain->hasFocus() ? m_rich : m_plain)->setFocus();
+            return true;
+        }
+        if (key->key() == Qt::Key_Return || key->key() == Qt::Key_Enter) {
+            (m_rich->hasFocus() ? m_rich : m_plain)->click();
+            return true;
+        }
+    }
+    return QDialog::eventFilter(object, event);
+}
+
 HelpDialog::HelpDialog(const Theme &theme, QWidget *parent) : QDialog(parent) {
     setObjectName("helpDialog");
-    setWindowTitle("Markdown help");
+    setWindowTitle("Help");
     setWindowFlag(Qt::WindowContextHelpButtonHint, false);
     setModal(true);
     auto *layout = new QVBoxLayout(this);
@@ -222,7 +309,7 @@ HelpDialog::HelpDialog(const Theme &theme, QWidget *parent) : QDialog(parent) {
     versionLabel->setFont(hintFont);
     layout->addWidget(versionLabel);
     connect(closeButton, &QPushButton::clicked, this, &QDialog::accept);
-    auto *toggle = new QShortcut(QKeySequence("Ctrl+H"), this);
+    auto *toggle = new QShortcut(QKeySequence("Alt+H"), this);
     toggle->setAutoRepeat(false);
     connect(toggle, &QShortcut::activated, this, &QDialog::accept);
     setTheme(theme);
@@ -233,8 +320,129 @@ void HelpDialog::setTheme(const Theme &theme) {
     setStyleSheet(dialogStyle(theme));
 }
 
+SearchDialog::SearchDialog(const Session &session, const Theme &theme, QWidget *parent)
+    : QDialog(parent), m_session(session) {
+    setObjectName("searchDialog");
+    setWindowTitle("Search");
+    setWindowFlag(Qt::WindowContextHelpButtonHint, false);
+    setModal(true);
+    auto *layout = new QVBoxLayout(this);
+    layout->setContentsMargins(24, 24, 24, 20);
+    layout->setSpacing(16);
+    m_query = new QLineEdit(this);
+    m_query->setObjectName("searchQuery");
+    m_query->setPlaceholderText("Search all notes…");
+    m_query->setAccessibleName("Search all notes");
+    layout->addWidget(m_query);
+    m_results = new QListWidget(this);
+    m_results->setObjectName("searchResults");
+    m_results->setAccessibleName("Search results");
+    m_results->setWordWrap(true);
+    layout->addWidget(m_results, 1);
+    m_status = new QLabel(this);
+    m_status->setObjectName("dialogHint");
+    layout->addWidget(m_status);
+    auto *hint = new QLabel("↑/↓  Choose     Enter  Open     Esc  Cancel", this);
+    hint->setObjectName("dialogHint");
+    QFont small = font();
+    small.setPointSizeF(9.5);
+    hint->setFont(small);
+    layout->addWidget(hint);
+    m_query->installEventFilter(this);
+    m_results->installEventFilter(this);
+    connect(m_query, &QLineEdit::textChanged, this, &SearchDialog::refresh);
+    connect(m_results, &QListWidget::itemActivated, this, [this] { accept(); });
+    setTheme(theme);
+    refresh();
+    resize(520, 360);
+    m_query->setFocus();
+}
+
+void SearchDialog::setTheme(const Theme &theme) {
+    setStyleSheet(dialogStyle(theme) + QStringLiteral(
+        "QLineEdit, QListWidget { background: %1; color: %2; border: 1px solid %3; border-radius: 4px; }"
+        "QLineEdit { padding: 7px; selection-background-color: %4; selection-color: %5; }"
+        "QListWidget::item { padding: 8px; }"
+        "QListWidget::item:selected { background: %4; color: %5; }")
+        .arg(theme.background.name(), theme.foreground.name(), theme.muted.name(),
+             theme.selection.name(), theme.selectedText.name()));
+}
+
+QString SearchDialog::noteId() const {
+    auto *item = m_results->currentItem();
+    return item ? item->data(Qt::UserRole).toString() : QString();
+}
+
+QString SearchDialog::query() const { return m_query->text(); }
+
+int SearchDialog::matchPosition() const {
+    auto *item = m_results->currentItem();
+    return item ? item->data(Qt::UserRole + 1).toInt() : -1;
+}
+
+void SearchDialog::setSession(const Session &session) {
+    // Refresh only when note contents or order change, preserving keyboard navigation.
+    bool changed = session.notes.size() != m_session.notes.size();
+    for (int i = 0; !changed && i < session.notes.size(); ++i)
+        changed = session.notes[i].id != m_session.notes[i].id || session.notes[i].text != m_session.notes[i].text;
+    if (changed) {
+        m_session = session;
+        refresh();
+    }
+}
+
+void SearchDialog::refresh() {
+    const QString previousId = noteId();
+    const int previousPosition = matchPosition();
+    m_results->clear();
+    const QString needle = query();
+    if (needle.isEmpty()) {
+        m_status->setText("Type to search all notes");
+        return;
+    }
+    int selected = 0;
+    for (int i = 0; i < m_session.notes.size() && m_results->count() < 100; ++i) {
+        const auto &note = m_session.notes[i];
+        int from = 0;
+        while (m_results->count() < 100) {
+            const int position = note.text.indexOf(needle, from, Qt::CaseInsensitive);
+            if (position < 0) break;
+            const int start = qMax(0, position - 35);
+            QString snippet = note.text.mid(start, qMin(qsizetype(150), needle.size() + 70)).simplified();
+            if (start > 0) snippet.prepend("…");
+            if (start + qMin(qsizetype(150), needle.size() + 70) < note.text.size()) snippet.append("…");
+            auto *item = new QListWidgetItem(QStringLiteral("%1  ·  %2").arg(i + 1).arg(snippet), m_results);
+            item->setData(Qt::UserRole, note.id);
+            item->setData(Qt::UserRole + 1, position);
+            if (note.id == previousId && position == previousPosition)
+                selected = m_results->count() - 1;
+            from = position + needle.size();
+        }
+    }
+    if (m_results->count()) m_results->setCurrentRow(selected);
+    m_status->setText(m_results->count() == 0 ? "No matches" :
+                     m_results->count() == 100 ? "Showing the first 100 matches" :
+                     QStringLiteral("%1 matches").arg(m_results->count()));
+}
+
+bool SearchDialog::eventFilter(QObject *object, QEvent *event) {
+    if (event->type() == QEvent::KeyPress) {
+        const auto key = static_cast<QKeyEvent *>(event)->key();
+        if (key == Qt::Key_Return || key == Qt::Key_Enter) {
+            if (m_results->currentItem()) accept();
+            return true;
+        }
+        if (object == m_query && (key == Qt::Key_Up || key == Qt::Key_Down)) {
+            if (m_results->count())
+                m_results->setCurrentRow(qBound(0, m_results->currentRow() + (key == Qt::Key_Down ? 1 : -1), m_results->count() - 1));
+            return true;
+        }
+    }
+    return QDialog::eventFilter(object, event);
+}
+
 Window::Window(SessionStore &store, const Session &session, ThemeWatcher &theme, QWidget *parent)
-    : QMainWindow(parent), m_store(store), m_theme(theme.theme()) {
+    : QMainWindow(parent), m_store(store), m_theme(theme.theme()), m_altLabel(altKeyLabel()) {
     setWindowTitle("Omadraft");
     setMinimumSize(420, 320);
     resize(960, 720);
@@ -254,7 +462,24 @@ Window::Window(SessionStore &store, const Session &session, ThemeWatcher &theme,
     QFont tabFont = QFontDatabase::systemFont(QFontDatabase::FixedFont);
     tabFont.setPointSizeF(9);
     m_tabs->setFont(tabFont);
-    outer->addWidget(m_tabs);
+    auto *header = new QHBoxLayout;
+    header->setSpacing(12);
+    header->addWidget(m_tabs, 1);
+    m_copy = new CopyButton(root);
+    m_copy->setObjectName("copyNote");
+    m_copy->setAccessibleName("Copy active note");
+    m_copy->setToolTip(QStringLiteral("Copy the entire active note (%1+C)").arg(m_altLabel));
+    QFont copyFont = interfaceFont;
+    copyFont.setPointSizeF(9.5);
+    m_copy->setFont(copyFont);
+    m_copy->setFixedHeight(26);
+    m_copy->setFixedWidth(32);
+    header->addWidget(m_copy);
+    outer->addLayout(header);
+    connect(m_copy, &QPushButton::clicked, this, &Window::copyNote);
+    m_copyTimer.setSingleShot(true);
+    m_copyTimer.setInterval(1800);
+    connect(&m_copyTimer, &QTimer::timeout, this, [this] { m_copy->setProperty("copied", false); m_copy->update(); });
     outer->addSpacing(38);
 
     auto *column = new QWidget(root);
@@ -304,9 +529,11 @@ Window::Window(SessionStore &store, const Session &session, ThemeWatcher &theme,
         action->setAutoRepeat(false);
         connect(action, &QShortcut::activated, this, callback);
     };
-    shortcut(QKeySequence("Ctrl+T"), &Window::newNote);
-    shortcut(QKeySequence("Ctrl+Q"), &Window::discardNote);
-    shortcut(QKeySequence("Ctrl+H"), &Window::showHelp);
+    shortcut(QKeySequence("Alt+T"), &Window::newNote);
+    shortcut(QKeySequence("Alt+Q"), &Window::discardNote);
+    shortcut(QKeySequence("Alt+H"), &Window::showHelp);
+    shortcut(QKeySequence("Alt+C"), &Window::copyNote);
+    shortcut(QKeySequence("Alt+F"), &Window::showSearch);
     shortcut(QKeySequence("Alt+Left"), [this] { switchNote(-1); });
     shortcut(QKeySequence("Alt+Right"), [this] { switchNote(1); });
     connect(&theme, &ThemeWatcher::changed, this, &Window::applyTheme);
@@ -458,6 +685,60 @@ void Window::discardNote() {
     focusNote();
 }
 
+void Window::showSearch() {
+    if (QApplication::activeModalWidget()) return;
+    SearchDialog dialog(snapshot(), m_theme, this);
+    connect(&m_syncTimer, &QTimer::timeout, &dialog, [this, &dialog] { dialog.setSession(snapshot()); });
+    if (dialog.exec() == QDialog::Accepted) {
+        const int index = m_ids.indexOf(dialog.noteId());
+        if (index >= 0) {
+            auto *editor = m_editors[index];
+            const QString text = editor->toPlainText();
+            int position = dialog.matchPosition();
+            const QString query = dialog.query();
+            // A sync may have replaced or deleted the selected result while the dialog was open.
+            if (text.mid(position, query.size()).compare(query, Qt::CaseInsensitive) != 0)
+                position = text.indexOf(query, 0, Qt::CaseInsensitive);
+            if (position >= 0) {
+                m_tabs->setCurrentIndex(index);
+                QTextCursor cursor(editor->document());
+                cursor.setPosition(position);
+                cursor.setPosition(position + query.size(), QTextCursor::KeepAnchor);
+                editor->setTextCursor(cursor);
+                editor->ensureCursorVisible();
+            }
+        }
+    }
+    focusNote();
+}
+
+void Window::copyNote() {
+    if (QApplication::activeModalWidget())
+        return;
+    auto *editor = qobject_cast<QPlainTextEdit *>(m_stack->currentWidget());
+    if (!editor)
+        return;
+    // Capture the whole note before the dialog opens, independently of selection or sync.
+    const QString source = editor->toPlainText();
+    m_copyTimer.stop();
+    m_copy->setProperty("copied", false);
+    m_copy->update();
+    CopyDialog dialog(m_theme, this);
+    if (dialog.exec() == QDialog::Accepted) {
+        QTextDocument document;
+        document.setMarkdown(source, QTextDocument::MarkdownFeatures(QTextDocument::MarkdownDialectGitHub) | QTextDocument::MarkdownNoHTML);
+        auto *data = new QMimeData;
+        data->setText(document.toPlainText());
+        if (dialog.formatted())
+            data->setHtml(document.toHtml());
+        QApplication::clipboard()->setMimeData(data);
+        m_copy->setProperty("copied", true);
+        m_copy->update();
+        m_copyTimer.start();
+    }
+    focusNote();
+}
+
 void Window::showHelp() {
     if (m_discarding || m_helpOpen)
         return;
@@ -489,7 +770,7 @@ void Window::updateHint() {
     else if (m_helpOpen)
         m_hint->setText("Esc / Enter  Close help");
     else
-        m_hint->setText("Ctrl+T  New note     Alt+←/→  Switch note     Ctrl+Q  Discard note     Ctrl+H  Markdown help");
+        m_hint->setText(QStringLiteral("%1+T  New     %1+Q  Discard     %1+←/→  Switch     %1+F  Search     %1+C  Copy     %1+H  Help").arg(m_altLabel));
 }
 
 void Window::focusNote() {
@@ -499,6 +780,8 @@ void Window::focusNote() {
 
 void Window::applyTheme(const Theme &theme) {
     m_theme = theme;
+    m_copy->setProperty("ink", theme.muted);
+    m_copy->update();
     QPalette palette;
     palette.setColor(QPalette::Window, theme.background);
     palette.setColor(QPalette::WindowText, theme.foreground);
@@ -512,6 +795,8 @@ void Window::applyTheme(const Theme &theme) {
     setStyleSheet(QStringLiteral(
         "QMainWindow, QWidget#appRoot { background: %1; color: %2; }"
         "QPlainTextEdit { border: none; background: %1; color: %2; selection-background-color: %3; selection-color: %4; }"
+        "QPushButton#copyNote { background: transparent; color: %5; border: 1px solid transparent; border-radius: 4px; padding: 2px 8px; }"
+        "QPushButton#copyNote:hover, QPushButton#copyNote:focus { color: %2; border-color: %5; }"
         "QLabel#keyboardHints { color: %5; } QLabel#saveError { color: %2; padding: 8px; }"
         "QScrollBar:vertical { background: transparent; width: 5px; margin: 0; }"
         "QScrollBar::handle:vertical { background: %5; min-height: 24px; border-radius: 2px; }"
@@ -526,6 +811,10 @@ void Window::applyTheme(const Theme &theme) {
     for (auto *editor : m_editors)
         editor->setTheme(theme);
     if (auto *dialog = findChild<DiscardDialog *>())
+        dialog->setTheme(theme);
+    if (auto *dialog = findChild<SearchDialog *>())
+        dialog->setTheme(theme);
+    if (auto *dialog = findChild<CopyDialog *>())
         dialog->setTheme(theme);
     if (auto *dialog = findChild<HelpDialog *>())
         dialog->setTheme(theme);

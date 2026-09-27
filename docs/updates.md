@@ -1,6 +1,6 @@
 # Updates
 
-Open **Ctrl+H → Check for updates…**. Omadraft checks the latest stable GitHub
+Open **Alt+H → Check for updates…**. Omadraft checks the latest stable GitHub
 release only when you request it; normal startup never waits for the network.
 
 For local installations made with `bin/install`, choose **Update** to download the

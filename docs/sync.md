@@ -9,7 +9,7 @@ Omadraft does not install Syncthing, start a service, or share any notes.
    ```bash
    omarchy pkg add syncthing
    ```
-2. In Omadraft, press **Ctrl+H**, then choose **Set up sync…**.
+2. In Omadraft, press **Alt+H**, then choose **Set up sync…**.
 3. If Syncthing is not running, choose **Start Syncthing and enable at login**.
 4. Choose the other computer from the list. If it is not listed, copy its device ID
    from the same dialog on that computer and paste it here.

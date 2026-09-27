@@ -2,6 +2,7 @@
 #include "theme.h"
 #include "markdown.h"
 #include "window.h"
+#include "shortcuts.h"
 #include "sync.h"
 #include "update.h"
 #include "restart.h"
@@ -17,8 +18,10 @@
 #include <QApplication>
 #include <QFontDatabase>
 #include <QClipboard>
+#include <QMimeData>
 #include <QComboBox>
 #include <QLineEdit>
+#include <QListWidget>
 #include <QDir>
 #include <QFile>
 #include <QJsonDocument>
@@ -139,6 +142,9 @@ private slots:
     void atomicUpdate();
     void updateFlow();
     void restartProcessPreservesSession();
+    void copyNote();
+    void searchNotes();
+    void shortcutLabels();
     void preview();
 };
 
@@ -412,7 +418,7 @@ void OmadraftTests::keyboardAndAutosave() {
     QTest::qWait(30);
     auto *first = currentEditor(window);
     QTest::keyClicks(first, "First note");
-    QTest::keyClick(first, Qt::Key_T, Qt::ControlModifier);
+    QTest::keyClick(first, Qt::Key_T, Qt::AltModifier);
     QCOMPARE(window.snapshot().notes.size(), 2);
     QTest::keyClicks(currentEditor(window), "Second note");
     QTest::keyClick(currentEditor(window), Qt::Key_Left, Qt::AltModifier);
@@ -458,15 +464,16 @@ void OmadraftTests::markdownHelpShortcut() {
             if (!dialog)
                 return;
             opened = true;
+            QCOMPARE(dialog->windowTitle(), QString("Help"));
             for (auto *label : dialog->findChildren<QLabel *>())
                 hasHeadingExample |= label->text().contains("## Subheading");
             theme.changed(Theme::fallback(false));
             themeUpdated = dialog->grab().toImage().pixelColor(10, 10) == Theme::fallback(false).background;
-            QTest::keyClick(dialog->focusWidget(), Qt::Key_T, Qt::ControlModifier);
-            QTest::keyClick(dialog->focusWidget(), Qt::Key_Q, Qt::ControlModifier);
-            QTest::keyClick(dialog->focusWidget(), key, key == Qt::Key_H ? Qt::ControlModifier : Qt::NoModifier);
+            QTest::keyClick(dialog->focusWidget(), Qt::Key_T, Qt::AltModifier);
+            QTest::keyClick(dialog->focusWidget(), Qt::Key_Q, Qt::AltModifier);
+            QTest::keyClick(dialog->focusWidget(), key, key == Qt::Key_H ? Qt::AltModifier : Qt::NoModifier);
         });
-        QTest::keyClick(currentEditor(window), Qt::Key_H, Qt::ControlModifier);
+        QTest::keyClick(currentEditor(window), Qt::Key_H, Qt::AltModifier);
         QTRY_VERIFY(opened);
         QVERIFY(hasHeadingExample);
         QVERIFY(themeUpdated);
@@ -530,7 +537,7 @@ void OmadraftTests::discardAndRestart() {
         QTest::keyClick(dialog->focusWidget(), Qt::Key_Left);
         QTest::keyClick(dialog->focusWidget(), Qt::Key_Return);
     });
-    QTest::keyClick(currentEditor(window), Qt::Key_Q, Qt::ControlModifier);
+    QTest::keyClick(currentEditor(window), Qt::Key_Q, Qt::AltModifier);
     QCOMPARE(window.snapshot().notes.size(), 1);
     QCOMPARE(currentEditor(window)->toPlainText(), QString("Keep me"));
     QVERIFY(window.close());
@@ -969,6 +976,167 @@ void OmadraftTests::restartProcessPreservesSession() {
     QCOMPARE(process.readAllStandardOutput().trimmed(), QByteArray("Restart preserved notes, PID, arguments, and session lock."));
 }
 
+void OmadraftTests::shortcutLabels() {
+    QTemporaryDir root;
+    QVERIFY(QDir().mkpath(root.path() + "/sys/firmware/devicetree/base"));
+    QVERIFY(QDir().mkpath(root.path() + "/sys/class/dmi/id"));
+    const QString model = root.path() + "/sys/firmware/devicetree/base/model";
+    const QString product = root.path() + "/sys/class/dmi/id/product_name";
+    QCOMPARE(altKeyLabel(root.path()), QString("Alt"));
+    QVERIFY(writeFile(model, QByteArray("Apple MacBook Pro (13-inch, M1, 2020)") + char(0)));
+    QCOMPARE(altKeyLabel(root.path()), QString("⌥"));
+    QVERIFY(QFile::remove(model));
+    QVERIFY(writeFile(product, "MacBookPro17,1\n"));
+    QCOMPARE(altKeyLabel(root.path()), QString("⌥"));
+    QVERIFY(writeFile(product, "Desktop\n"));
+    QCOMPARE(altKeyLabel(root.path()), QString("Alt"));
+}
+
+void OmadraftTests::searchNotes() {
+    QTemporaryDir directory;
+    SessionStore store(directory.path());
+    Session session;
+    QString error, notice;
+    QVERIFY(store.load(session, error, notice));
+    session.notes[0].text = "First MATCH";
+    auto second = Note::blank();
+    second.text = "Åäö match and another match";
+    session.notes.append(second);
+    ThemeWatcher theme({directory.path() + "/no-theme"});
+    SearchDialog search(session, theme.theme());
+    auto *query = search.findChild<QLineEdit *>("searchQuery");
+    auto *results = search.findChild<QListWidget *>("searchResults");
+    QCOMPARE(results->count(), 0);
+    query->setText("match");
+    QCOMPARE(results->count(), 3);
+    results->setCurrentRow(1);
+    QCOMPARE(search.noteId(), second.id);
+    QCOMPARE(search.matchPosition(), 4);
+    auto changed = session;
+    changed.notes.removeFirst();
+    search.setSession(changed);
+    QCOMPARE(results->count(), 2);
+    QCOMPARE(search.noteId(), second.id);
+    QCOMPARE(search.matchPosition(), 4);
+    query->setText("ÅÄÖ");
+    QCOMPARE(results->count(), 1);
+    query->setText("missing");
+    QCOMPARE(results->count(), 0);
+    QTest::keyClick(query, Qt::Key_Return);
+    QCOMPARE(search.result(), int(QDialog::Rejected));
+    query->setText("[.*]");
+    QCOMPARE(results->count(), 0);
+
+    Window window(store, session, theme);
+    window.show();
+    window.activateWindow();
+    QTest::qWait(30);
+    auto open = [&](bool cancel) {
+        window.activateWindow();
+        window.focusNote();
+        QTest::qWait(20);
+        QTimer::singleShot(30, &window, [&] {
+            auto *dialog = qobject_cast<SearchDialog *>(QApplication::activeModalWidget());
+            QVERIFY(dialog);
+            const auto closeDialog = qScopeGuard([&] { if (dialog->isVisible()) dialog->reject(); });
+            auto *input = dialog->findChild<QLineEdit *>("searchQuery");
+            QVERIFY(input->hasFocus());
+            QTest::keyClicks(input, "match");
+            QTest::keyClick(input, Qt::Key_Down);
+            QTest::keyClick(input, cancel ? Qt::Key_Escape : Qt::Key_Return);
+        });
+        QTest::keyClick(currentEditor(window), Qt::Key_F, Qt::AltModifier);
+    };
+    open(true);
+    QCOMPARE(window.snapshot().active, 0);
+    open(false);
+    QCOMPARE(window.snapshot().active, 1);
+    QCOMPARE(currentEditor(window)->textCursor().selectedText(), QString("match"));
+    QCOMPARE(currentEditor(window)->textCursor().selectionStart(), 4);
+    QCOMPARE(currentEditor(window)->toPlainText(), second.text);
+    QVERIFY(window.close());
+}
+
+void OmadraftTests::copyNote() {
+    QTemporaryDir directory;
+    SessionStore store(directory.path());
+    Session session;
+    QString error, notice;
+    QVERIFY(store.load(session, error, notice));
+    session.notes[0].text = "Do not copy this other note";
+    auto note = Note::blank();
+    note.text = "# Heading\n\n**Bold** and *italic* with `code`.\n\n> A quote\n\n- Item\n\n[Link](https://example.com)\n\nÅäö";
+    session.notes.append(note);
+    session.active = 1;
+    ThemeWatcher theme({directory.path() + "/no-theme"});
+    Window window(store, session, theme);
+    window.show();
+    QTest::qWait(30);
+    auto *editor = currentEditor(window);
+    auto cursor = editor->textCursor();
+    cursor.setPosition(2);
+    cursor.setPosition(5, QTextCursor::KeepAnchor);
+    editor->setTextCursor(cursor);
+    auto *button = window.findChild<QPushButton *>("copyNote");
+    QVERIFY(button);
+    auto choose = [&](bool rich, bool cancel) {
+        window.activateWindow();
+        window.focusNote();
+        QTest::qWait(20);
+        QTimer::singleShot(30, [&] {
+            auto *dialog = qobject_cast<CopyDialog *>(QApplication::activeModalWidget());
+            QVERIFY(dialog);
+            const auto closeDialog = qScopeGuard([&] { if (dialog->isVisible()) dialog->reject(); });
+            auto *plain = dialog->findChild<QPushButton *>("copyPlain");
+            auto *formatted = dialog->findChild<QPushButton *>("copyFormatted");
+            QVERIFY(plain->hasFocus());
+            if (rich) {
+                QTest::keyClick(plain, Qt::Key_Right);
+                QVERIFY(formatted->hasFocus());
+            }
+            QTest::keyClick(rich ? formatted : plain, cancel ? Qt::Key_Escape : Qt::Key_Return);
+        });
+        if (rich)
+            QTest::keyClick(editor, Qt::Key_C, Qt::AltModifier);
+        else
+            button->click();
+    };
+    choose(false, false);
+    auto *clipboard = QApplication::clipboard();
+    const QString plain = clipboard->text();
+    QVERIFY(plain.startsWith("Heading"));
+    QVERIFY(plain.contains("Bold and italic with code."));
+    QVERIFY(plain.contains("A quote"));
+    QVERIFY(plain.contains("Item"));
+    QVERIFY(plain.contains("Link"));
+    QVERIFY(plain.contains("Åäö"));
+    QVERIFY(!plain.contains("**"));
+    QVERIFY(!plain.contains("other note"));
+    QVERIFY(!clipboard->mimeData()->hasHtml());
+    QVERIFY(button->text().isEmpty());
+    QVERIFY(button->property("copied").toBool());
+    choose(true, false);
+    QCOMPARE(clipboard->text(), plain);
+    QVERIFY(clipboard->mimeData()->hasHtml());
+    const QString html = clipboard->mimeData()->html();
+    QVERIFY(html.contains("<h1"));
+    QVERIFY(html.contains("font-weight:700"));
+    QVERIFY(html.contains("font-style:italic"));
+    QVERIFY(html.contains("<ul"));
+    QVERIFY(html.contains("https://example.com"));
+    choose(false, true);
+    QCOMPARE(clipboard->mimeData()->html(), html);
+    QCOMPARE(editor->toPlainText(), note.text);
+    QCOMPARE(editor->textCursor().selectedText(), QString("Hea"));
+    QVERIFY(button->text().isEmpty());
+    QVERIFY(!button->property("copied").toBool());
+    editor->clear();
+    choose(false, false);
+    QCOMPARE(clipboard->text(), QString());
+    QVERIFY(!clipboard->mimeData()->hasHtml());
+    QVERIFY(window.close());
+}
+
 void OmadraftTests::preview() {
     const QString output = qEnvironmentVariable("OMADRAFT_SCREENSHOT_DIR");
     if (output.isEmpty())
@@ -1000,6 +1168,17 @@ void OmadraftTests::preview() {
     window.show();
     QTest::qWait(100);
     QVERIFY(window.grab().save(output + "/omadraft-dark.png"));
+    SearchDialog search(session, theme.theme(), &window);
+    search.findChild<QLineEdit *>("searchQuery")->setText("idea");
+    search.show();
+    QTest::qWait(30);
+    QVERIFY(search.grab().save(output + "/omadraft-search.png"));
+    search.close();
+    CopyDialog copy(theme.theme(), &window);
+    copy.show();
+    QTest::qWait(30);
+    QVERIFY(copy.grab().save(output + "/omadraft-copy.png"));
+    copy.close();
     DiscardDialog dialog(theme.theme(), &window);
     dialog.show();
     QTest::qWait(30);

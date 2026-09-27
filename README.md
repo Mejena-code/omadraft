@@ -59,13 +59,18 @@ To uninstall, run `./bin/uninstall`; your notes are kept.
 
 | Shortcut | Action |
 | --- | --- |
-| **Ctrl+T** | New note |
+| **Alt+T** | New note |
 | **Alt+← / →** | Previous / next note |
-| **Ctrl+Q** | Discard the current note, with confirmation |
-| **Ctrl+H** | Markdown help, sync setup, and updates |
+| **Alt+Q** | Discard the current note, with confirmation |
+| **Alt+H** | Help, sync setup, and updates |
+| **Alt+C** | Copy the entire active note |
+| **Alt+F** | Search all notes |
 | **Ctrl+Z** | Undo a text edit |
 | **Ctrl+Shift+Z** | Redo a text edit |
 | **Esc** | Close a dialog |
+
+On MacBooks, the app shows **⌥ (Option)** instead of **Alt**. Use the Option key
+for the same shortcuts; standard text editing shortcuts still use **Ctrl**.
 
 Click a number to switch notes, too. In the discard dialog, use the arrow keys to
 choose **Yes** or **No**, then press **Enter**. **No** is selected by default.
@@ -82,11 +87,11 @@ The line you are editing shows its Markdown syntax. On other lines, the markers
 step out of the way: headings have distinct sizes, quotes have a subtle rule, and
 emphasis looks like emphasis. Your saved text remains plain Markdown.
 
-Need a reminder? **Ctrl+H** opens a small reference with the common syntax.
+Need a reminder? **Alt+H** opens a small reference with the common syntax.
 Standard editing shortcuts and undo/redo work while the app is open.
 
 <details>
-<summary><strong>See the light theme and Markdown help</strong></summary>
+<summary><strong>See the light theme and Help</strong></summary>
 
 ![The same Markdown note in Omadraft's light palette](assets/screenshots/omadraft-light.png)
 
@@ -97,6 +102,27 @@ Standard editing shortcuts and undo/redo work while the app is open.
 Omadraft supports headings, bold, italic, strikethrough, lists, blockquotes, links,
 and code styling. It does not render images, tables, or embedded HTML, and it does
 not fetch content from links. Undo history lasts for the current app session.
+
+## Search your notes
+
+Press **Alt+F** (**⌥+F** on MacBook) to search across all open notes.
+Results update as you type, ignoring letter case. Use **↑/↓** to choose a match
+and **Enter** to jump to it, or **Esc** to return without moving your cursor.
+The matching text is selected in its note. Search uses literal Markdown text,
+including syntax, and shows up to 100 matches at a time.
+
+## Copy a note
+
+Choose the **copy icon** in the top-right corner or press **Alt+C** to copy the entire active note:
+
+- **Plain text** removes Markdown syntax and formatting.
+- **Formatted text** includes headings, emphasis, lists, and links for apps that
+  accept rich text, plus a plain-text fallback. The destination app determines
+  how the formatting appears.
+
+Use the arrow keys to choose, **Enter** to copy, or **Esc** to cancel.
+The icon briefly becomes a checkmark when the note is on your clipboard.
+To copy just a selection as Markdown, use the usual **Ctrl+C** shortcut.
 
 ## Your desktop, your colors
 
@@ -114,7 +140,7 @@ Sync is **optional**. Omadraft works completely locally without Syncthing.
 To connect two computers:
 
 1. Install Syncthing on both: `omarchy pkg add syncthing`.
-2. Open **Ctrl+H → Set up sync…** in Omadraft.
+2. Open **Alt+H → Set up sync…** in Omadraft.
 3. Start Syncthing using the button if needed, then choose the other computer or
    paste its device ID.
 4. Enable sharing and repeat on the other computer.
@@ -127,7 +153,7 @@ Both computers need to be online together, or share with an always-on third devi
 
 ## Updates
 
-Choose **Ctrl+H → Check for updates… → Update**. Omadraft verifies the download,
+Choose **Alt+H → Check for updates… → Update**. Omadraft verifies the download,
 checks that it can run, and keeps the previous executable. Then choose
 **Restart now** or reopen the app later. There are no update checks during normal startup.
 
