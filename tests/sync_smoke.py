@@ -95,7 +95,7 @@ class Node:
     def setup(self, peer):
         environment = dict(self.environment, OMADRAFT_TEST_SYNCTHING_HOME=str(self.home),
                            OMADRAFT_TEST_DRAFTS=str(self.drafts), OMADRAFT_TEST_PEER=peer.id)
-        result = subprocess.run([str(TESTS), "syncthingSetupIntegration"], env=environment, capture_output=True, timeout=45)
+        result = subprocess.run([str(TESTS), "syncthingSetupIntegration"], env=environment, capture_output=True, timeout=75)
         assert result.returncode == 0, result.stdout.decode() + result.stderr.decode()
         folders = self.request("config/folders")
         folder = next(item for item in folders if item["id"] == "omadraft-drafts-v1")

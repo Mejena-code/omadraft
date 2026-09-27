@@ -797,14 +797,14 @@ void OmadraftTests::syncthingSetupIntegration() {
     auto *own = dialog.findChild<QLineEdit *>("syncOwnId");
     auto *enable = dialog.findChild<QPushButton *>("syncEnable");
     auto *status = dialog.findChild<QLabel *>("syncStatus");
-    QTRY_VERIFY_WITH_TIMEOUT(!own->text().isEmpty() && enable->isEnabled(), 15000);
+    QTRY_VERIFY2_WITH_TIMEOUT(!own->text().isEmpty() && enable->isEnabled(), qPrintable(status->text()), 15000);
     auto *peers = dialog.findChild<QComboBox *>("syncPeers");
     const QString peer = qEnvironmentVariable("OMADRAFT_TEST_PEER");
     const int index = peers->findData(peer);
     if (index >= 0) peers->setCurrentIndex(index);
     else dialog.findChild<QLineEdit *>("syncPeerId")->setText(peer);
     QTest::mouseClick(enable, Qt::LeftButton);
-    QTRY_VERIFY_WITH_TIMEOUT(status->text().startsWith("This computer is ready."), 15000);
+    QTRY_VERIFY2_WITH_TIMEOUT(status->text().startsWith("This computer is ready."), qPrintable(status->text()), 15000);
     const QString screenshots = qEnvironmentVariable("OMADRAFT_SCREENSHOT_DIR");
     if (!screenshots.isEmpty()) {
         QVERIFY(dialog.grab().save(screenshots + "/omadraft-sync-dark.png"));

@@ -41,8 +41,15 @@ void SyncthingClient::discover(std::function<void(const QString &)> done) {
             done("Could not run Syncthing. Check that it is installed, then choose Refresh.");
         }
     });
-    connect(process, &QProcess::finished, this, [this, process, done](int code) {
+    connect(process, &QProcess::finished, this, [this, process, timeout, done](int code) {
         const QString output = QString::fromUtf8(process->readAllStandardOutput());
+        // Syncthing 1.x exposes this operation as a flag; 2.x uses a subcommand.
+        if (code != 0 && process->exitStatus() == QProcess::NormalExit && !process->property("legacyPaths").toBool()) {
+            process->setProperty("legacyPaths", true);
+            process->start("syncthing", {"--paths"});
+            timeout->start(5000);
+            return;
+        }
         process->deleteLater();
         const auto match = QRegularExpression("Configuration file:\\s*\\n\\s*([^\\n]+)").match(output);
         if (code != 0 || !match.hasMatch()) {
