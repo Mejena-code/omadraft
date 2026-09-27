@@ -55,7 +55,7 @@ To uninstall, run `./bin/uninstall`; your notes are kept.
 [Release downloads](https://github.com/johnohrberg/omadraft/releases/latest) ·
 [Build and packaging details](docs/development.md)
 
-## Five shortcuts
+## Keyboard shortcuts
 
 | Shortcut | Action |
 | --- | --- |
@@ -63,11 +63,18 @@ To uninstall, run `./bin/uninstall`; your notes are kept.
 | **Alt+← / →** | Previous / next note |
 | **Ctrl+Q** | Discard the current note, with confirmation |
 | **Ctrl+H** | Markdown help, sync setup, and updates |
+| **Ctrl+Z** | Undo a text edit |
+| **Ctrl+Shift+Z** | Redo a text edit |
 | **Esc** | Close a dialog |
 
 Click a number to switch notes, too. In the discard dialog, use the arrow keys to
 choose **Yes** or **No**, then press **Enter**. **No** is selected by default.
 Closing the app keeps all your notes; discarding the last note leaves a blank one.
+
+Accidentally deleted some text? Press **Ctrl+Z** to bring it back. Repeat to undo
+earlier edits, or press **Ctrl+Shift+Z** to redo them. Each note keeps its own undo
+history while the app is open. This history is not saved when you close the app
+and does not restore discarded notes.
 
 ## Markdown, without the clutter
 
