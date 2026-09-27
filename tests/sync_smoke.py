@@ -45,8 +45,10 @@ class Node:
         self.home = home
         self.environment = dict(ENV, STHOMEDIR=str(home))
         home.mkdir()
-        subprocess.run(["syncthing", "generate", "--home", str(home), "--no-port-probing"],
-                       env=self.environment, check=True, capture_output=True)
+        generated = subprocess.run(["syncthing", "generate", "--home", str(home)],
+                                   env=self.environment, capture_output=True)
+        if generated.returncode:
+            raise AssertionError("Syncthing configuration failed: " + generated.stderr.decode())
         tree = ET.parse(home / "config.xml")
         root = tree.getroot()
         self.id = root.find("device").get("id")
@@ -161,6 +163,11 @@ with tempfile.TemporaryDirectory(prefix="omadraft-sync-") as temporary:
         for node in nodes:
             assert node.app.poll() is None
         print("PASS: real setup dialog, new peer pairing, idempotent setup, two-way live sync, matching tab order, and discard propagation.")
+    except Exception:
+        for node in nodes:
+            node.log.flush()
+            print((node.home / "test.log").read_text(errors="replace")[-6000:])
+        raise
     finally:
         for node in reversed(nodes):
             node.close()
