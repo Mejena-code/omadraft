@@ -1,0 +1,25 @@
+#!/usr/bin/env bash
+set -euo pipefail
+project_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
+install_prefix=${PREFIX:-"$HOME/.local"}
+if [[ ${1:-} != --no-build ]]; then
+  "$project_dir/bin/build"
+fi
+install -d "$install_prefix/bin"
+temporary_binary=$(mktemp "$install_prefix/bin/.omadraft.XXXXXX")
+trap 'rm -f -- "$temporary_binary"' EXIT
+install -m755 "$project_dir/build/app/omadraft" "$temporary_binary"
+mv -f -- "$temporary_binary" "$install_prefix/bin/omadraft"
+install -Dm644 "$project_dir/assets/omadraft.desktop" "$install_prefix/share/applications/omadraft.desktop"
+install -Dm644 "$project_dir/assets/omadraft.svg" "$install_prefix/share/icons/hicolor/scalable/apps/omadraft.svg"
+install -d "$install_prefix/share/omadraft"
+printf '{"kind":"local","format":1}\n' > "$install_prefix/share/omadraft/install.json"
+install -Dm644 "$project_dir/LICENSE" "$install_prefix/share/licenses/omadraft/LICENSE"
+if command -v update-desktop-database >/dev/null; then
+  update-desktop-database "$install_prefix/share/applications"
+fi
+printf '\nInstalled Omadraft in %s. Search for "draft" in your app launcher.\n' "$install_prefix"
+case ":$PATH:" in
+  *":$install_prefix/bin:"*) ;;
+  *) printf 'Add %s/bin to PATH to launch Omadraft from the terminal or app menu.\n' "$install_prefix" ;;
+esac

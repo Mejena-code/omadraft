@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Name=Omadraft
+GenericName=Markdown Notes
+Comment=Minimal Markdown notes. Open, jot, close.
+Exec=omadraft
+Icon=omadraft
+Terminal=false
+Categories=Utility;TextEditor;
+Keywords=draft;notes;markdown;scratchpad;omarchy;
+StartupNotify=true
+StartupWMClass=omadraft

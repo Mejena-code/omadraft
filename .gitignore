@@ -1,0 +1,7 @@
+/build/
+/dist/
+*.user
+*.AppImage
+*.pkg.tar.*
+__pycache__/
+*.pyc

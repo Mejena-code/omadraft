@@ -1,0 +1,2 @@
+#pragma once
+#define OMADRAFT_VERSION \"$$VERSION\"

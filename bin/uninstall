@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+set -euo pipefail
+install_prefix=${PREFIX:-"$HOME/.local"}
+rm -f -- "$install_prefix/bin/omadraft" \
+  "$install_prefix/bin/omadraft.previous" \
+  "$install_prefix/share/omadraft/install.json" \
+  "$install_prefix/share/applications/omadraft.desktop" \
+  "$install_prefix/share/icons/hicolor/scalable/apps/omadraft.svg" \
+  "$install_prefix/share/licenses/omadraft/LICENSE"
+if command -v update-desktop-database >/dev/null && [[ -d "$install_prefix/share/applications" ]]; then
+  update-desktop-database "$install_prefix/share/applications"
+fi
+printf 'Omadraft was uninstalled. Your saved notes have been kept.\n'

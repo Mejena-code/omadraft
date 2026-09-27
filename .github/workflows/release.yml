@@ -1,0 +1,66 @@
+name: Build release
+on:
+  push:
+    tags:
+      - 'v*'
+permissions:
+  contents: read
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-24.04
+            arch: x86_64
+          - runner: ubuntu-24.04-arm
+            arch: aarch64
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install build dependencies
+        run: sudo apt-get update && sudo apt-get install -y build-essential qt6-base-dev qt6-svg-dev qt6-wayland syncthing
+      - name: Configure release
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          python3 - <<'PY'
+          import os, re
+          from pathlib import Path
+          version = re.search(r'^VERSION\s*=\s*(\S+)', Path('omadraft.pro').read_text(), re.M)[1]
+          assert os.environ['RELEASE_TAG'] == 'v' + version, 'Tag must match omadraft.pro'
+          PY
+          ./bin/configure-release --repository "https://github.com/$GITHUB_REPOSITORY"
+      - name: Build and test
+        run: |
+          ./bin/build
+          OMADRAFT_PROCESS_TESTS=1 ./bin/test
+          python3 tests/smoke.py
+          python3 tests/sync_smoke.py
+      - name: Prepare downloads
+        run: |
+          ./bin/package --repository "https://github.com/$GITHUB_REPOSITORY"
+          ./bin/binary-release
+          mkdir -p build/release-assets
+          cp dist/*/omadraft-* dist/*/PKGBUILD dist/*/SHA256SUMS build/release-assets/
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-${{ matrix.arch }}
+          path: build/release-assets/
+  publish:
+    needs: build
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: release-*
+          merge-multiple: true
+          path: release
+      - name: Create a draft release for review
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          gh release create "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --verify-tag --draft --generate-notes release/*

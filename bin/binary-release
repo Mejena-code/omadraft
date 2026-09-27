@@ -1,0 +1,28 @@
+#!/usr/bin/env python3
+"""Package the native executable for GitHub's in-app update downloads."""
+import hashlib
+import os
+from pathlib import Path
+import platform
+import re
+import shutil
+import subprocess
+
+root = Path(__file__).resolve().parent.parent
+version = re.search(r"^VERSION\s*=\s*(\S+)", (root / "omadraft.pro").read_text(), re.MULTILINE)[1]
+architecture = {"x86_64": "x86_64", "aarch64": "aarch64", "arm64": "aarch64"}.get(platform.machine())
+if platform.system() != "Linux" or not architecture:
+    raise SystemExit("Supported release platforms: Linux x86_64 and aarch64.")
+binary = root / "build/app/omadraft"
+environment = dict(os.environ, QT_QPA_PLATFORM="offscreen", QT_QPA_PLATFORMTHEME="", QT_STYLE_OVERRIDE="Fusion")
+result = subprocess.run([str(binary), "--version"], env=environment, check=True, capture_output=True, text=True)
+if result.stdout.strip() != f"omadraft {version}":
+    raise SystemExit("Rebuild the app before packaging: executable version does not match omadraft.pro.")
+destination = root / "dist" / version
+destination.mkdir(parents=True, exist_ok=True)
+asset = destination / f"omadraft-{version}-linux-{architecture}"
+shutil.copy2(binary, asset)
+asset.chmod(0o755)
+digest = hashlib.sha256(asset.read_bytes()).hexdigest()
+asset.with_name(asset.name + ".sha256").write_text(f"{digest}  {asset.name}\n")
+print(f"Created {asset}")

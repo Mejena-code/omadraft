@@ -1,0 +1,50 @@
+#!/usr/bin/env python3
+"""Create a source release and an Arch build recipe, optionally ready for AUR."""
+import gzip
+import hashlib
+import json
+import io
+import re
+import tarfile
+from pathlib import Path
+import argparse
+
+root = Path(__file__).resolve().parent.parent
+parser = argparse.ArgumentParser(description=__doc__)
+parser.add_argument("--repository", help="Public repository URL, such as https://github.com/you/omadraft")
+args = parser.parse_args()
+repository = (args.repository or "").rstrip("/")
+if repository and not re.fullmatch(r"https://github\.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+", repository):
+    parser.error("Use an HTTPS GitHub repository URL without a trailing .git suffix.")
+version = re.search(r"^VERSION\s*=\s*(\S+)", (root / "omadraft.pro").read_text(), re.MULTILINE).group(1)
+destination = root / "dist" / version
+destination.mkdir(parents=True, exist_ok=True)
+archive = destination / f"omadraft-{version}.tar.gz"
+included = ["docs", "src", "assets", "bin", "tests", "packaging", ".github", "omadraft.pro", "LICENSE", "README.md", "CONTRIBUTING.md", ".gitignore"]
+with archive.open("wb") as raw, gzip.GzipFile(filename="", mode="wb", fileobj=raw, mtime=0) as compressed, tarfile.open(fileobj=compressed, mode="w") as bundle:
+    for entry in included:
+        path = root / entry
+        paths = sorted(path.rglob("*")) if path.is_dir() else [path]
+        for item in paths:
+            if not item.is_file() or "__pycache__" in item.parts:
+                continue
+            relative = item.relative_to(root)
+            data = item.read_bytes()
+            if repository and relative.as_posix() == "assets/release.json":
+                data = (json.dumps({"repository": repository.removeprefix("https://github.com/")}) + "\n").encode()
+            info = tarfile.TarInfo(f"omadraft-{version}/{relative.as_posix()}")
+            info.size = len(data)
+            info.mode = 0o755 if relative.parts[0] == "bin" else 0o644
+            info.mtime = 0
+            bundle.addfile(info, io.BytesIO(data))
+digest = hashlib.sha256(archive.read_bytes()).hexdigest()
+source = archive.name if not repository else f"{repository}/releases/download/v{version}/{archive.name}"
+recipe = (root / "packaging/PKGBUILD.in").read_text()
+for key, value in {"VERSION": version, "REPOSITORY": repository, "SOURCE": source, "SHA256": digest}.items():
+    recipe = recipe.replace(f"@{key}@", value)
+(destination / "PKGBUILD").write_text(recipe)
+(destination / "SHA256SUMS").write_text(f"{digest}  {archive.name}\n")
+print(f"Created {archive}")
+print(f"Created {destination / 'PKGBUILD'}")
+if not repository:
+    print("The recipe builds locally. Use --repository when preparing a public release.")

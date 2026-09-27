@@ -1,0 +1,25 @@
+# Maintainer: Omadraft contributors
+pkgname=omadraft
+pkgver=@VERSION@
+pkgrel=1
+pkgdesc='Minimal Markdown notes for Omarchy. Open, jot, close.'
+arch=('x86_64' 'aarch64')
+url='@REPOSITORY@'
+license=('MIT')
+depends=('qt6-base' 'qt6-svg' 'qt6-wayland' 'gcc-libs' 'glibc')
+optdepends=('syncthing: optional synchronization between computers')
+makedepends=()
+source=('@SOURCE@')
+sha256sums=('@SHA256@')
+
+build() {
+  mkdir -p "$srcdir/omadraft-$pkgver/build/package"
+  cd "$srcdir/omadraft-$pkgver/build/package"
+  qmake6 ../../omadraft.pro PREFIX=/usr CONFIG+=release
+  make
+}
+
+package() {
+  cd "$srcdir/omadraft-$pkgver/build/package"
+  make INSTALL_ROOT="$pkgdir" install
+}

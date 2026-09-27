@@ -1,0 +1,28 @@
+name: Build and test
+on:
+  push:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  qt:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install dependencies
+        run: sudo apt-get update && sudo apt-get install -y build-essential qt6-base-dev qt6-svg-dev qt6-wayland desktop-file-utils syncthing
+      - name: Build
+        run: ./bin/build
+      - name: Test
+        run: OMADRAFT_PROCESS_TESTS=1 ./bin/test
+      - name: Process smoke tests
+        run: python3 tests/smoke.py
+      - name: Syncthing integration
+        run: python3 tests/sync_smoke.py
+      - name: Validate launcher and installer
+        run: |
+          desktop-file-validate assets/omadraft.desktop
+          PREFIX="$RUNNER_TEMP/omadraft-install" ./bin/install --no-build
+          PREFIX="$RUNNER_TEMP/omadraft-install" ./bin/uninstall
+      - name: Prepare source package
+        run: ./bin/package

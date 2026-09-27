@@ -1,0 +1,17 @@
+#!/usr/bin/env python3
+"""Set the GitHub repository embedded in release builds."""
+import argparse
+import json
+import re
+from pathlib import Path
+
+parser = argparse.ArgumentParser(description=__doc__)
+parser.add_argument("--repository", required=True)
+args = parser.parse_args()
+repository = args.repository.rstrip("/")
+match = re.fullmatch(r"https://github\.com/([A-Za-z0-9_-]+/[A-Za-z0-9_.-]+)", repository)
+if not match or repository.endswith(".git"):
+    parser.error("Use https://github.com/OWNER/REPOSITORY without .git.")
+root = Path(__file__).resolve().parent.parent
+(root / "assets/release.json").write_text(json.dumps({"repository": match[1]}) + "\n")
+print(f"Release update source: {repository}")
