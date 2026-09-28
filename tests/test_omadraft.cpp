@@ -308,7 +308,9 @@ void OmadraftTests::fencedCodeSurface() {
         for (int line = 0; line < block.layout()->lineCount(); ++line) {
             QTextCursor cursor(block);
             cursor.setPosition(block.position() + block.layout()->lineAt(line).textStart());
-            const int y = editor.cursorRect(cursor).center().y();
+            // Sample above the glyphs so font metrics and subpixel antialiasing
+            // cannot make text pixels look like a background mismatch.
+            const int y = editor.cursorRect(cursor).top();
             if (rendered.pixelColor(rendered.width() - 20, y) != theme.surface) {
                 rendered.save("fenced-code-failure.png");
                 qWarning() << "Block/line/y/DPR" << i << line << y << rendered.devicePixelRatio()
@@ -347,7 +349,7 @@ void OmadraftTests::fencedCodeSurface() {
     for (int line = 0; line < last.layout()->lineCount(); ++line) {
         QTextCursor cursor(last);
         cursor.setPosition(last.position() + last.layout()->lineAt(line).textStart());
-        QCOMPARE(unfinished.pixelColor(unfinished.width() - 20, editor.cursorRect(cursor).center().y()), theme.surface);
+        QCOMPARE(unfinished.pixelColor(unfinished.width() - 20, editor.cursorRect(cursor).top()), theme.surface);
     }
 }
 
