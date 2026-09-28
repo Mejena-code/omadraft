@@ -309,6 +309,13 @@ void OmadraftTests::fencedCodeSurface() {
             QTextCursor cursor(block);
             cursor.setPosition(block.position() + block.layout()->lineAt(line).textStart());
             const int y = editor.cursorRect(cursor).center().y();
+            if (rendered.pixelColor(rendered.width() - 20, y) != theme.surface) {
+                rendered.save("fenced-code-failure.png");
+                qWarning() << "Block/line/y/DPR" << i << line << y << rendered.devicePixelRatio()
+                           << "cursor" << editor.textCursor().selectionStart() << editor.textCursor().selectionEnd();
+                for (const auto &extra : editor.extraSelections())
+                    qWarning() << "Extra" << extra.cursor.position() << extra.cursor.anchor() << extra.format.background().color();
+            }
             QCOMPARE(rendered.pixelColor(rendered.width() - 20, y), theme.surface);
         }
     }

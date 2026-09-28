@@ -26,3 +26,10 @@ jobs:
           PREFIX="$RUNNER_TEMP/omadraft-install" ./bin/uninstall
       - name: Prepare source package
         run: ./bin/package
+      - name: Upload rendering failure screenshots
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rendering-failures
+          path: build/tests/*-failure.png
+          if-no-files-found: ignore
