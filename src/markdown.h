@@ -9,6 +9,7 @@ struct MarkdownBlockData : QTextBlockUserData {
     bool sourceVisible = false;
     bool quote = false;
     bool bullet = false;
+    bool fencedCode = false;
     int indent = 0;
 };
 
@@ -36,6 +37,7 @@ protected:
     void paintEvent(QPaintEvent *event) override;
 private:
     void updateSourceRange();
+    void updateCodeBackgrounds();
     MarkdownHighlighter *m_highlighter;
     Theme m_theme;
 };

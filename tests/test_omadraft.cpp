@@ -122,6 +122,7 @@ private slots:
     void themeDirectoryReplacement();
     void windowThemeAndHintContrast();
     void markdownLiteralCode();
+    void fencedCodeSurface();
     void markdownConcealment();
     void markdownEditingPreservesSource();
     void keyboardAndAutosave();
@@ -285,6 +286,62 @@ void OmadraftTests::themeDirectoryReplacement() {
     QVERIFY(changed.count() >= 1);
     QVERIFY(writeFile(file, "background = '#112233'\nforeground = '#ffffff'\n"));
     QTRY_COMPARE_WITH_TIMEOUT(watcher.theme().background.name(), QString("#112233"), 2000);
+}
+
+void OmadraftTests::fencedCodeSurface() {
+    const Theme theme = Theme::fallback();
+    MarkdownEditor editor(theme);
+    editor.resize(440, 420);
+    const QString source = "```python\ndef greet():\n" + QString("word ").repeated(25) +
+                           "\n\n**literal**\n```\nAfter the code\n";
+    editor.setPlainText(source);
+    editor.show();
+    editor.activateWindow();
+    editor.setFocus();
+    editor.moveCursor(QTextCursor::End);
+    QTest::qWait(30);
+    QCOMPARE(editor.extraSelections().size(), 6);
+    const QImage rendered = editor.viewport()->grab().toImage();
+    for (int i = 0; i < 6; ++i) {
+        const QTextBlock block = editor.document()->findBlockByNumber(i);
+        QVERIFY(dynamic_cast<MarkdownBlockData *>(block.userData())->fencedCode);
+        for (int line = 0; line < block.layout()->lineCount(); ++line) {
+            QTextCursor cursor(block);
+            cursor.setPosition(block.position() + block.layout()->lineAt(line).textStart());
+            const int y = editor.cursorRect(cursor).center().y();
+            QCOMPARE(rendered.pixelColor(rendered.width() - 20, y), theme.surface);
+        }
+    }
+    QCOMPARE(formatAt(editor.document()->findBlockByNumber(0), 0).foreground().color().alpha(), 0);
+    QTextCursor opening(editor.document()->firstBlock());
+    editor.setTextCursor(opening);
+    QVERIFY(formatAt(editor.document()->firstBlock(), 0).foreground().color().alpha() > 0);
+    QVERIFY(formatAt(editor.document()->findBlockByNumber(4), 2).fontWeight() != QFont::Bold);
+    QCOMPARE(editor.toPlainText(), source);
+    editor.setPlainText("Ordinary text");
+    QTest::qWait(10);
+    QVERIFY(editor.extraSelections().isEmpty());
+    editor.clear();
+    QTest::keyClicks(&editor, "```");
+    QTest::keyClick(&editor, Qt::Key_Return);
+    QTest::keyClicks(&editor, "code");
+    QTest::keyClick(&editor, Qt::Key_Return);
+    QTest::keyClicks(&editor, "```");
+    QTest::keyClick(&editor, Qt::Key_Return);
+    QTest::keyClicks(&editor, "outside");
+    QTest::qWait(20);
+    QCOMPARE(editor.extraSelections().size(), 3);
+    QCOMPARE(editor.document()->findBlockByNumber(3).userState(), 0);
+    editor.setPlainText("```\n" + QString("word ").repeated(25));
+    editor.moveCursor(QTextCursor::End);
+    QTest::qWait(20);
+    const QImage unfinished = editor.viewport()->grab().toImage();
+    const QTextBlock last = editor.document()->lastBlock();
+    for (int line = 0; line < last.layout()->lineCount(); ++line) {
+        QTextCursor cursor(last);
+        cursor.setPosition(last.position() + last.layout()->lineAt(line).textStart());
+        QCOMPARE(unfinished.pixelColor(unfinished.width() - 20, editor.cursorRect(cursor).center().y()), theme.surface);
+    }
 }
 
 void OmadraftTests::markdownLiteralCode() {
@@ -1199,6 +1256,26 @@ void OmadraftTests::preview() {
     QTest::qWait(20);
     QVERIFY(window.grab().save(output + "/omadraft-narrow.png"));
     QVERIFY(window.close());
+
+    Window codeWindow(store, session, theme);
+    codeWindow.resize(720, 600);
+    auto *codeEditor = currentEditor(codeWindow);
+    codeEditor->setPlainText("# Code block\n\nText before the block.\n\n```python\ndef greet(name):\n    message = f'Hello, {name}!'\n\n    print(message)\n\ngreet('Omadraft')\n```\n\nText after the block.\n");
+    codeWindow.show();
+    theme.changed(Theme::fallback(false));
+    codeWindow.activateWindow();
+    codeEditor->setFocus();
+    codeEditor->moveCursor(QTextCursor::End);
+    QTest::qWait(30);
+    QVERIFY(codeWindow.grab().save(output + "/omadraft-code-light.png"));
+    theme.changed(Theme::fallback(true));
+    QTest::qWait(30);
+    QVERIFY(codeWindow.grab().save(output + "/omadraft-code-dark.png"));
+    QTextCursor codeCursor(codeEditor->document()->findBlockByNumber(5));
+    codeEditor->setTextCursor(codeCursor);
+    QTest::qWait(30);
+    QVERIFY(codeWindow.grab().save(output + "/omadraft-code-editing.png"));
+    QVERIFY(codeWindow.close());
 
     MarkdownEditor headings(theme.theme());
     QPalette headingPalette = headings.palette();

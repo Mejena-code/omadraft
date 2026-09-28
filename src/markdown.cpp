@@ -68,6 +68,7 @@ void MarkdownHighlighter::highlightBlock(const QString &text) {
     static const QRegularExpression fence(R"(^ {0,3}(`{3,}|~{3,})(.*)$)");
     const auto fenceMatch = fence.match(text);
     if (previousBlockState() > 0) {
+        data->fencedCode = true;
         const int state = previousBlockState();
         const QChar delimiter = (state & 1) ? '~' : '`';
         const bool closes = fenceMatch.hasMatch() && fenceMatch.captured(1).at(0) == delimiter &&
@@ -80,6 +81,7 @@ void MarkdownHighlighter::highlightBlock(const QString &text) {
         return;
     }
     if (fenceMatch.hasMatch()) {
+        data->fencedCode = true;
         setFormat(0, int(text.size()), muted);
         setCurrentBlockState((fenceMatch.capturedLength(1) << 1) | (fenceMatch.captured(1).at(0) == '~' ? 1 : 0));
         conceal(0, int(text.size()));
@@ -207,12 +209,38 @@ MarkdownEditor::MarkdownEditor(const Theme &theme, QWidget *parent)
     : QPlainTextEdit(parent), m_highlighter(new MarkdownHighlighter(document(), theme)), m_theme(theme) {
     connect(this, &QPlainTextEdit::cursorPositionChanged, this, &MarkdownEditor::updateSourceRange);
     connect(this, &QPlainTextEdit::selectionChanged, this, &MarkdownEditor::updateSourceRange);
+    connect(document(), &QTextDocument::contentsChanged, this, &MarkdownEditor::updateCodeBackgrounds);
 }
 
 void MarkdownEditor::setTheme(const Theme &theme) {
     m_theme = theme;
     m_highlighter->setTheme(theme);
+    updateCodeBackgrounds();
     viewport()->update();
+}
+
+void MarkdownEditor::updateCodeBackgrounds() {
+    QList<QTextEdit::ExtraSelection> backgrounds;
+    for (QTextBlock block = document()->firstBlock(); block.isValid(); block = block.next()) {
+        const auto *data = dynamic_cast<MarkdownBlockData *>(block.userData());
+        if (!data || !data->fencedCode)
+            continue;
+        QTextEdit::ExtraSelection background;
+        background.cursor = QTextCursor(block);
+        if (block.next().isValid())
+            background.cursor.setPosition(block.next().position(), QTextCursor::KeepAnchor);
+        else
+            background.cursor.movePosition(QTextCursor::EndOfBlock, QTextCursor::KeepAnchor);
+        background.format.setBackground(m_theme.surface);
+        background.format.setProperty(QTextFormat::FullWidthSelection, true);
+        backgrounds.append(background);
+        if (!block.next().isValid()) {
+            // Include the remainder of the last visual line in an unfinished block.
+            background.cursor.clearSelection();
+            backgrounds.append(background);
+        }
+    }
+    setExtraSelections(backgrounds);
 }
 
 void MarkdownEditor::updateSourceRange() {
