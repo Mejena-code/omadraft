@@ -209,7 +209,6 @@ MarkdownEditor::MarkdownEditor(const Theme &theme, QWidget *parent)
     : QPlainTextEdit(parent), m_highlighter(new MarkdownHighlighter(document(), theme)), m_theme(theme) {
     connect(this, &QPlainTextEdit::cursorPositionChanged, this, &MarkdownEditor::updateSourceRange);
     connect(this, &QPlainTextEdit::selectionChanged, this, &MarkdownEditor::updateSourceRange);
-    connect(document(), &QTextDocument::contentsChanged, this, &MarkdownEditor::updateCodeBackgrounds);
 }
 
 void MarkdownEditor::setTheme(const Theme &theme) {
@@ -221,26 +220,28 @@ void MarkdownEditor::setTheme(const Theme &theme) {
 
 void MarkdownEditor::updateCodeBackgrounds() {
     QList<QTextEdit::ExtraSelection> backgrounds;
-    for (QTextBlock block = document()->firstBlock(); block.isValid(); block = block.next()) {
+    for (QTextBlock block = firstVisibleBlock(); block.isValid(); block = block.next()) {
+        const QRectF area = blockBoundingGeometry(block).translated(contentOffset());
+        if (area.top() > viewport()->height()) break;
         const auto *data = dynamic_cast<MarkdownBlockData *>(block.userData());
-        if (!data || !data->fencedCode)
+        if (!data || !data->fencedCode || area.bottom() < 0)
             continue;
-        QTextEdit::ExtraSelection background;
-        background.cursor = QTextCursor(block);
-        if (block.next().isValid())
-            background.cursor.setPosition(block.next().position(), QTextCursor::KeepAnchor);
-        else
-            background.cursor.movePosition(QTextCursor::EndOfBlock, QTextCursor::KeepAnchor);
-        background.format.setBackground(m_theme.surface);
-        background.format.setProperty(QTextFormat::FullWidthSelection, true);
-        backgrounds.append(background);
-        if (!block.next().isValid()) {
-            // Include the remainder of the last visual line in an unfinished block.
-            background.cursor.clearSelection();
+        // Empty full-width selections work across Qt versions. Give each wrapped
+        // visual line its own selection so its background also reaches the edge.
+        for (int line = 0; line < block.layout()->lineCount(); ++line) {
+            QTextEdit::ExtraSelection background;
+            background.cursor = QTextCursor(block);
+            background.cursor.setPosition(block.position() + block.layout()->lineAt(line).textStart());
+            background.format.setBackground(m_theme.surface);
+            background.format.setProperty(QTextFormat::FullWidthSelection, true);
             backgrounds.append(background);
         }
     }
-    setExtraSelections(backgrounds);
+    const auto previous = extraSelections();
+    bool changed = previous.size() != backgrounds.size();
+    for (int i = 0; !changed && i < backgrounds.size(); ++i)
+        changed = previous[i].cursor != backgrounds[i].cursor || previous[i].format != backgrounds[i].format;
+    if (changed) setExtraSelections(backgrounds);
 }
 
 void MarkdownEditor::updateSourceRange() {
@@ -268,6 +269,7 @@ void MarkdownEditor::focusOutEvent(QFocusEvent *event) {
 }
 
 void MarkdownEditor::paintEvent(QPaintEvent *event) {
+    updateCodeBackgrounds();
     QPlainTextEdit::paintEvent(event);
     QPainter painter(viewport());
     painter.setRenderHint(QPainter::Antialiasing);
