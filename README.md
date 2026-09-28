@@ -10,8 +10,8 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/johnohrberg/omadraft/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/johnohrberg/omadraft?style=flat-square&color=78824b"></a>
-  <a href="https://github.com/johnohrberg/omadraft/actions/workflows/check.yml"><img alt="Build and test" src="https://github.com/johnohrberg/omadraft/actions/workflows/check.yml/badge.svg"></a>
+  <a href="https://github.com/Mejena-code/omadraft/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/Mejena-code/omadraft?style=flat-square&color=78824b"></a>
+  <a href="https://github.com/Mejena-code/omadraft/actions/workflows/check.yml"><img alt="Build and test" src="https://github.com/Mejena-code/omadraft/actions/workflows/check.yml/badge.svg"></a>
   <a href="LICENSE"><img alt="MIT license" src="https://img.shields.io/badge/license-MIT-78824b?style=flat-square"></a>
 </p>
 
@@ -39,7 +39,7 @@ Run this in a terminal:
 
 ```bash
 omarchy pkg add base-devel qt6-base qt6-svg qt6-wayland && \
-git clone https://github.com/johnohrberg/omadraft.git && \
+git clone https://github.com/Mejena-code/omadraft.git && \
 cd omadraft && ./bin/install
 ```
 
@@ -52,7 +52,7 @@ password; the app itself installs for your user. `~/.local/bin` must be on your 
 Already have a checkout? Run `git pull --ff-only && ./bin/install` from that folder.
 To uninstall, run `./bin/uninstall`; your notes are kept.
 
-[Release downloads](https://github.com/johnohrberg/omadraft/releases/latest) ·
+[Release downloads](https://github.com/Mejena-code/omadraft/releases/latest) ·
 [Build and packaging details](docs/development.md)
 
 ## Keyboard shortcuts

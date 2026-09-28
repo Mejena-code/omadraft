@@ -33,3 +33,11 @@ For a custom installation prefix, use `PREFIX=/your/prefix ./bin/install`.
 
 
 [Back to Omadraft](../README.md)
+
+## Repository move in 0.4.1
+
+Versions 0.4.0 and earlier use the previous repository address and need a one-time
+manual reinstall after the move to `Mejena-code/omadraft`. In your source checkout,
+run `git remote set-url origin https://github.com/Mejena-code/omadraft.git`,
+then `git pull --ff-only && ./bin/install`. Close and reopen the app afterward.
+Your notes are kept; subsequent updates can use the Help window again.

@@ -45,7 +45,7 @@ For each release:
 1. Push the reviewed source to GitHub.
 2. Configure the update source with:
    ```bash
-   ./bin/configure-release --repository https://github.com/johnohrberg/omadraft
+   ./bin/configure-release --repository https://github.com/Mejena-code/omadraft
    ```
    The workflow sets this automatically to its own repository when building releases.
 3. Set the version in `omadraft.pro`, commit the changes, and push a matching tag.
@@ -59,7 +59,7 @@ For each release:
 
 For manual release preparation, build natively on each architecture, then run
 `./bin/binary-release`. Create the source archive with
-`./bin/package --repository https://github.com/johnohrberg/omadraft`. Source archives
+`./bin/package --repository https://github.com/Mejena-code/omadraft`. Source archives
 are reproducible and include the configured update source. Keep the generated
 archive and PKGBUILD together: the recipe contains that archive's checksum.
 
